@@ -12,8 +12,12 @@ function toPostResponse(post) {
   return {
     id: post._id,
     content: post.content,
+    title: post.title || "",
+    description: post.description || "",
     platforms: post.platforms,
     mediaUrl: post.mediaUrl || "",
+    thumbnailUrl: post.thumbnailUrl || "",
+    type: post.type || "image",
     status: post.status,
     scheduledTime: post.scheduledTime,
     createdAt: post.createdAt
@@ -21,12 +25,24 @@ function toPostResponse(post) {
 }
 
 export async function createPostController(req, res) {
-  const { content, platforms, mediaUrl = "", status, scheduledTime = null } = req.body;
+  const {
+    content,
+    title = "",
+    description = "",
+    platforms,
+    mediaUrl = "",
+    thumbnailUrl = "",
+    type = "image",
+    status,
+    scheduledTime = null
+  } = req.body;
+  const normalizedPlatforms = Array.isArray(platforms) ? platforms : [];
+  const isYouTubePost = normalizedPlatforms.includes("YouTube");
 
-  if (!content?.trim() || !Array.isArray(platforms) || platforms.length === 0) {
+  if ((!content?.trim() && !description?.trim()) || normalizedPlatforms.length === 0) {
     return res.status(400).json({
       success: false,
-      message: "content and at least one platform are required"
+      message: "content or description and at least one platform are required"
     });
   }
 
@@ -44,10 +60,21 @@ export async function createPostController(req, res) {
     });
   }
 
+  if (isYouTubePost && !title.trim()) {
+    return res.status(400).json({
+      success: false,
+      message: "title is required for YouTube posts"
+    });
+  }
+
   const post = await createPostRecord({
-    content: content.trim(),
-    platforms,
+    content: content?.trim() || description.trim(),
+    title: title.trim(),
+    description: description.trim(),
+    platforms: normalizedPlatforms,
     mediaUrl,
+    thumbnailUrl,
+    type: type === "video" ? "video" : "image",
     status,
     scheduledTime: status === "scheduled" ? scheduledTime : null
   });
@@ -103,12 +130,24 @@ export async function getPostByIdController(req, res) {
 
 export async function updatePostController(req, res) {
   const { id } = req.params;
-  const { content, platforms, mediaUrl = "", status, scheduledTime = null } = req.body;
+  const {
+    content,
+    title = "",
+    description = "",
+    platforms,
+    mediaUrl = "",
+    thumbnailUrl = "",
+    type = "image",
+    status,
+    scheduledTime = null
+  } = req.body;
+  const normalizedPlatforms = Array.isArray(platforms) ? platforms : [];
+  const isYouTubePost = normalizedPlatforms.includes("YouTube");
 
-  if (!content?.trim() || !Array.isArray(platforms) || platforms.length === 0) {
+  if ((!content?.trim() && !description?.trim()) || normalizedPlatforms.length === 0) {
     return res.status(400).json({
       success: false,
-      message: "content and at least one platform are required"
+      message: "content or description and at least one platform are required"
     });
   }
 
@@ -126,10 +165,21 @@ export async function updatePostController(req, res) {
     });
   }
 
+  if (isYouTubePost && !title.trim()) {
+    return res.status(400).json({
+      success: false,
+      message: "title is required for YouTube posts"
+    });
+  }
+
   const updated = await updatePostById(id, {
-    content: content.trim(),
-    platforms,
+    content: content?.trim() || description.trim(),
+    title: title.trim(),
+    description: description.trim(),
+    platforms: normalizedPlatforms,
     mediaUrl,
+    thumbnailUrl,
+    type: type === "video" ? "video" : "image",
     status,
     scheduledTime: status === "scheduled" ? scheduledTime : null
   });

@@ -23,11 +23,12 @@ function normalizeScheduledPost(post) {
   const platformList = Array.isArray(post.platforms) ? post.platforms : [];
   return {
     id: post.id,
-    title: post.content,
+    title: post.title || post.content,
     platform: platformList[0] || "Instagram",
     platforms: platformList,
     scheduledAt: post.scheduledTime,
-    status: post.status
+    status: post.status,
+    type: post.type || (platformList.includes("YouTube") ? "video" : "image")
   };
 }
 
@@ -35,9 +36,10 @@ function normalizeDraftPost(post) {
   const platformList = Array.isArray(post.platforms) ? post.platforms : [];
   return {
     id: post.id,
-    title: post.content,
+    title: post.title || post.content,
     createdAt: post.createdAt,
-    platforms: platformList
+    platforms: platformList,
+    type: post.type || (platformList.includes("YouTube") ? "video" : "image")
   };
 }
 
@@ -128,8 +130,12 @@ function SchedulerPage() {
     try {
       await api.createPost({
         content: title.trim(),
+        title: platform === "YouTube" ? title.trim() : "",
+        description: platform === "YouTube" ? title.trim() : "",
         platforms: [platform],
         mediaUrl: "",
+        thumbnailUrl: "",
+        type: platform === "YouTube" ? "video" : "image",
         status: "scheduled",
         scheduledTime: new Date(scheduledAt).toISOString()
       });
@@ -340,6 +346,7 @@ function SchedulerPage() {
                 <option>Instagram</option>
                 <option>LinkedIn</option>
                 <option>Twitter / X</option>
+                <option>YouTube</option>
               </select>
               <input
                 type="datetime-local"

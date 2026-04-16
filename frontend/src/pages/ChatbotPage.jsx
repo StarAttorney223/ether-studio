@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ChatSidebar from "../components/ChatSidebar";
+import { useAuth } from "../context/AuthContext";
 import { api } from "../services/api";
 
 const LAST_CHAT_KEY = "studio-last-chat-id";
@@ -23,6 +24,7 @@ function buildChatTitle(messages) {
 }
 
 function ChatbotPage() {
+  const { user } = useAuth();
   const [chats, setChats] = useState([]);
   const [messages, setMessages] = useState(starterMessages);
   const [chatId, setChatId] = useState(null);
@@ -117,6 +119,75 @@ function ChatbotPage() {
     setIsSidebarOpen(false);
   };
 
+  const activateChat = (nextChat) => {
+    if (nextChat) {
+      setMessages(nextChat.messages || []);
+      setChatId(nextChat.id);
+      localStorage.setItem(LAST_CHAT_KEY, nextChat.id);
+      return;
+    }
+
+    setMessages([]);
+    setChatId(null);
+    localStorage.removeItem(LAST_CHAT_KEY);
+  };
+
+  const handleDeleteChat = async (id) => {
+    if (!window.confirm("Delete this chat?")) {
+      return;
+    }
+
+    const previousChats = chats;
+    const previousChatId = chatId;
+    const previousMessages = messages;
+    const remainingChats = chats.filter((chat) => chat.id !== id);
+
+    setChats(remainingChats);
+
+    if (chatId === id) {
+      activateChat(remainingChats[0] || null);
+    }
+
+    try {
+      await api.deleteChat(id);
+    } catch {
+      setChats(previousChats);
+      const restoredActiveChat = previousChats.find((chat) => chat.id === previousChatId) || null;
+      if (restoredActiveChat) {
+        activateChat(restoredActiveChat);
+      } else {
+        setMessages(previousMessages);
+        setChatId(previousChatId);
+      }
+    }
+  };
+
+  const handleDeleteAllChats = async () => {
+    if (!chats.length || !window.confirm("Delete all chats?")) {
+      return;
+    }
+
+    const previousChats = chats;
+    const previousChatId = chatId;
+    const previousMessages = messages;
+    setChats([]);
+    activateChat(null);
+    setPrompt("");
+
+    try {
+      await api.deleteAllChats(user?.id || "me");
+    } catch {
+      setChats(previousChats);
+      const restoredActiveChat = previousChats.find((chat) => chat.id === previousChatId) || null;
+      if (restoredActiveChat) {
+        activateChat(restoredActiveChat);
+      } else {
+        setMessages(previousMessages);
+        setChatId(previousChatId);
+      }
+    }
+  };
+
   const sendMessage = async () => {
     if (!prompt.trim() || loading) return;
 
@@ -151,6 +222,8 @@ function ChatbotPage() {
           onToggleMobile={() => setIsSidebarOpen((prev) => !prev)}
           onNewChat={newChat}
           onOpenChat={openChat}
+          onDeleteChat={handleDeleteChat}
+          onDeleteAllChats={handleDeleteAllChats}
         />
 
         <div className="grid min-w-0 flex-1 gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">

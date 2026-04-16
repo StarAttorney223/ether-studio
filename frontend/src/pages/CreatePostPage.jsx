@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { CalendarClock, ImagePlus, Sparkles } from "lucide-react";
+import { CalendarClock, ImagePlus, Sparkles, Video } from "lucide-react";
 import BackButton from "../components/BackButton";
 import Toast from "../components/common/Toast";
 import PostPreview from "../components/create-post/PostPreview";
 import { api } from "../services/api";
 
-const platformOptions = ["Instagram", "LinkedIn", "Twitter / X"];
+const platformOptions = ["Instagram", "LinkedIn", "Twitter / X", "YouTube"];
 
 function toDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -31,7 +31,6 @@ function CreatePostPage() {
   const { id } = useParams();
   const isEditMode = Boolean(id);
 
-  const [caption, setCaption] = useState("");
   const [idea, setIdea] = useState("");
   const [tone, setTone] = useState("Professional");
   const [hashtags, setHashtags] = useState([]);
@@ -39,19 +38,42 @@ function CreatePostPage() {
   const [scheduleType, setScheduleType] = useState("now");
   const [scheduleDate, setScheduleDate] = useState("");
   const [scheduleTime, setScheduleTime] = useState("");
-  const [mediaUrl, setMediaUrl] = useState("");
   const [previewPlatform, setPreviewPlatform] = useState("Instagram");
   const [statusText, setStatusText] = useState("");
   const [loadingAction, setLoadingAction] = useState("");
   const [loadingPost, setLoadingPost] = useState(false);
   const [generatingAi, setGeneratingAi] = useState(false);
   const [toast, setToast] = useState({ message: "", type: "success" });
+  const [postData, setPostData] = useState({
+    caption: "",
+    title: "",
+    description: "",
+    hashtags: "",
+    media: "",
+    thumbnail: "",
+    platform: "Instagram",
+    type: "image"
+  });
+
+  const isYouTubeSelected = platforms.includes("YouTube");
+  const previewablePlatforms = useMemo(
+    () => platformOptions.filter((platform) => platforms.includes(platform)),
+    [platforms]
+  );
 
   useEffect(() => {
     if (!toast.message) return undefined;
     const timer = setTimeout(() => setToast({ message: "", type: "success" }), 2600);
     return () => clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    if (!previewablePlatforms.includes(previewPlatform)) {
+      const fallbackPlatform = previewablePlatforms[0] || "Instagram";
+      setPreviewPlatform(fallbackPlatform);
+      setPostData((prev) => ({ ...prev, platform: fallbackPlatform }));
+    }
+  }, [previewPlatform, previewablePlatforms]);
 
   useEffect(() => {
     async function loadPostForEdit() {
@@ -61,10 +83,22 @@ function CreatePostPage() {
       try {
         const response = await api.getPostById(id);
         const post = response.data;
-        setCaption(post.content || "");
-        setPlatforms(Array.isArray(post.platforms) && post.platforms.length > 0 ? post.platforms : ["Instagram"]);
-        setMediaUrl(post.mediaUrl || "");
-        setPreviewPlatform(post.platforms?.[0] || "Instagram");
+        const nextPlatforms =
+          Array.isArray(post.platforms) && post.platforms.length > 0 ? post.platforms : ["Instagram"];
+        const nextPreviewPlatform = nextPlatforms[0] || "Instagram";
+
+        setPlatforms(nextPlatforms);
+        setPreviewPlatform(nextPreviewPlatform);
+        setPostData({
+          caption: post.content || "",
+          title: post.title || "",
+          description: post.description || post.content || "",
+          hashtags: "",
+          media: post.mediaUrl || "",
+          thumbnail: post.thumbnailUrl || "",
+          platform: nextPreviewPlatform,
+          type: post.type || (nextPlatforms.includes("YouTube") ? "video" : "image")
+        });
 
         if (post.status === "scheduled" && post.scheduledTime) {
           const localParts = toLocalDateParts(post.scheduledTime);
@@ -91,28 +125,44 @@ function CreatePostPage() {
     return `${scheduleDate}T${scheduleTime}`;
   }, [scheduleDate, scheduleTime]);
 
+  const updatePostData = (field, value) => {
+    setPostData((prev) => ({ ...prev, [field]: value }));
+  };
+
   const togglePlatform = (platform) => {
     setPlatforms((prev) => {
       if (prev.includes(platform)) {
         if (prev.length === 1) return prev;
         const next = prev.filter((item) => item !== platform);
-        if (!next.includes(previewPlatform)) {
-          setPreviewPlatform(next[0]);
+        if (platform === "YouTube") {
+          setPostData((current) => ({ ...current, platform: next[0] || "Instagram" }));
         }
         return next;
       }
+
       return [...prev, platform];
     });
+
+    if (platform === "YouTube") {
+      setPreviewPlatform("YouTube");
+      setPostData((prev) => ({ ...prev, platform: "YouTube", type: "video" }));
+    }
   };
 
-  const handleMediaUpload = async (event) => {
+  const handleMediaUpload = async (event, field) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     try {
       const dataUrl = await toDataUrl(file);
-      setMediaUrl(dataUrl);
-      setStatusText("Media ready for preview and save.");
+      updatePostData(field, dataUrl);
+
+      if (field === "media") {
+        const nextType = file.type.startsWith("video/") ? "video" : "image";
+        updatePostData("type", nextType);
+      }
+
+      setStatusText(field === "thumbnail" ? "Thumbnail ready for preview and save." : "Media ready for preview and save.");
     } catch {
       setStatusText("Could not process selected media file.");
     }
@@ -132,9 +182,21 @@ function CreatePostPage() {
         tone
       });
 
-      setCaption(response.data?.caption || "");
-      setHashtags(response.data?.hashtags || []);
-      setToast({ message: "AI caption generated.", type: "success" });
+      const nextHashtags = response.data?.hashtags || [];
+      setHashtags(nextHashtags);
+      updatePostData("hashtags", nextHashtags.join(" "));
+
+      if (previewPlatform === "YouTube") {
+        updatePostData("title", response.data?.title || "");
+        updatePostData("description", response.data?.description || response.data?.caption || "");
+        if (!isYouTubeSelected) {
+          setPlatforms((prev) => (prev.includes("YouTube") ? prev : [...prev, "YouTube"]));
+        }
+      } else {
+        updatePostData("caption", response.data?.caption || "");
+      }
+
+      setToast({ message: previewPlatform === "YouTube" ? "AI YouTube copy generated." : "AI caption generated.", type: "success" });
     } catch (error) {
       setToast({ message: error.message || "AI generation failed.", type: "error" });
     } finally {
@@ -143,8 +205,15 @@ function CreatePostPage() {
   };
 
   const submitPost = async (status) => {
-    if (!caption.trim()) {
-      setStatusText("Please enter post content.");
+    const normalizedContent = postData.caption.trim() || postData.description.trim();
+
+    if (isYouTubeSelected && !postData.title.trim()) {
+      setStatusText("Title is required for YouTube posts.");
+      return;
+    }
+
+    if (!normalizedContent) {
+      setStatusText(isYouTubeSelected ? "Please enter a description or caption." : "Please enter post content.");
       return;
     }
 
@@ -158,9 +227,13 @@ function CreatePostPage() {
 
     try {
       const payload = {
-        content: caption.trim(),
+        content: normalizedContent,
+        title: postData.title.trim(),
+        description: postData.description.trim(),
         platforms,
-        mediaUrl,
+        mediaUrl: postData.media,
+        thumbnailUrl: postData.thumbnail,
+        type: isYouTubeSelected ? "video" : postData.type,
         status,
         scheduledTime: status === "scheduled" ? new Date(scheduledDateTime).toISOString() : null
       };
@@ -189,7 +262,11 @@ function CreatePostPage() {
   };
 
   if (loadingPost) {
-    return <div className="rounded-3xl border border-gray-200 bg-white p-6 text-sm text-gray-600 shadow-soft dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">Loading post...</div>;
+    return (
+      <div className="rounded-3xl border border-gray-200 bg-white p-6 text-sm text-gray-600 shadow-soft dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+        Loading post...
+      </div>
+    );
   }
 
   return (
@@ -250,7 +327,7 @@ function CreatePostPage() {
               <input
                 value={idea}
                 onChange={(event) => setIdea(event.target.value)}
-                placeholder="What should this post communicate?"
+                placeholder={previewPlatform === "YouTube" ? "What should this video be about?" : "What should this post communicate?"}
                 className="h-11 w-full rounded-xl bg-gray-100 px-3 text-sm text-gray-900 outline-none dark:bg-gray-700 dark:text-white"
               />
             </label>
@@ -270,7 +347,7 @@ function CreatePostPage() {
                 disabled={generatingAi}
                 className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-gray-900 disabled:opacity-60 dark:bg-gray-800 dark:text-white"
               >
-                <Sparkles size={14} /> {generatingAi ? "Generating..." : "Generate with AI"}
+                <Sparkles size={14} /> {generatingAi ? "Generating..." : previewPlatform === "YouTube" ? "Generate YouTube Copy" : "Generate with AI"}
               </button>
             </div>
           </div>
@@ -280,27 +357,79 @@ function CreatePostPage() {
               <Sparkles size={16} />
               Manual Write
             </div>
+
+            {isYouTubeSelected && (
+              <div className="mb-4 grid gap-4 md:grid-cols-2">
+                <label className="space-y-2 md:col-span-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500 dark:text-gray-300">Video Title</span>
+                  <input
+                    value={postData.title}
+                    onChange={(event) => updatePostData("title", event.target.value)}
+                    placeholder="Write a compelling YouTube title..."
+                    className="h-12 w-full rounded-2xl bg-gray-100 px-4 text-sm text-gray-900 outline-none dark:bg-gray-700 dark:text-white"
+                  />
+                </label>
+                <label className="space-y-2 md:col-span-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500 dark:text-gray-300">Video Description</span>
+                  <textarea
+                    value={postData.description}
+                    onChange={(event) => updatePostData("description", event.target.value)}
+                    placeholder="Describe the video, add context, and guide discovery..."
+                    className="h-36 w-full resize-none rounded-3xl bg-gray-100 px-4 py-3 text-sm text-gray-900 outline-none dark:bg-gray-700 dark:text-white"
+                  />
+                </label>
+              </div>
+            )}
+
             <label className="space-y-2">
-              <span className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500 dark:text-gray-300">Caption</span>
+              <span className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500 dark:text-gray-300">
+                {isYouTubeSelected ? "Caption / Supporting Copy" : "Caption"}
+              </span>
               <textarea
-                value={caption}
-                onChange={(e) => setCaption(e.target.value)}
-                placeholder="E.g. Write a professional post about the impact of generative AI on creative studios..."
+                value={postData.caption}
+                onChange={(e) => updatePostData("caption", e.target.value)}
+                placeholder={
+                  isYouTubeSelected
+                    ? "Optional short caption or promo copy for cross-posting..."
+                    : "E.g. Write a professional post about the impact of generative AI on creative studios..."
+                }
                 className="h-36 w-full resize-none rounded-3xl bg-gray-100 px-4 py-3 text-sm text-gray-900 outline-none dark:bg-gray-700 dark:text-white"
               />
             </label>
-            {hashtags.length > 0 && (
-              <p className="mt-2 text-xs font-semibold text-studio-primary">{hashtags.join(" ")}</p>
+
+            {(hashtags.length > 0 || postData.hashtags) && (
+              <p className="mt-2 text-xs font-semibold text-studio-primary">
+                {postData.hashtags || hashtags.join(" ")}
+              </p>
             )}
           </div>
 
-          <div>
-            <p className="mb-2 text-sm font-semibold uppercase tracking-[0.08em] text-studio-primary">Media Assets</p>
-            <label className="flex h-36 cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-300 bg-white text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
-              <ImagePlus size={20} />
-              <span className="mt-2 text-sm font-semibold">Upload Media</span>
-              <input type="file" accept="image/*,video/*" className="hidden" onChange={handleMediaUpload} />
-            </label>
+          <div className="space-y-4">
+            <p className="text-sm font-semibold uppercase tracking-[0.08em] text-studio-primary">Media Assets</p>
+
+            {isYouTubeSelected ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="flex h-36 cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-300 bg-white text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                  <Video size={20} />
+                  <span className="mt-2 text-sm font-semibold">Upload Video</span>
+                  <span className="mt-1 px-6 text-center text-xs">Use your main YouTube media file here.</span>
+                  <input type="file" accept="video/*" className="hidden" onChange={(event) => handleMediaUpload(event, "media")} />
+                </label>
+
+                <label className="flex h-36 cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-300 bg-white text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                  <ImagePlus size={20} />
+                  <span className="mt-2 text-sm font-semibold">Upload Thumbnail</span>
+                  <span className="mt-1 px-6 text-center text-xs">Add a thumbnail for the YouTube preview card.</span>
+                  <input type="file" accept="image/*" className="hidden" onChange={(event) => handleMediaUpload(event, "thumbnail")} />
+                </label>
+              </div>
+            ) : (
+              <label className="flex h-36 cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-300 bg-white text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                <ImagePlus size={20} />
+                <span className="mt-2 text-sm font-semibold">Upload Media</span>
+                <input type="file" accept="image/*,video/*" className="hidden" onChange={(event) => handleMediaUpload(event, "media")} />
+              </label>
+            )}
           </div>
 
           <div className="grid gap-3 rounded-[2rem] border border-gray-200 bg-white p-5 text-gray-900 shadow-soft dark:border-gray-700 dark:bg-gray-800 dark:text-white md:grid-cols-2">
@@ -372,8 +501,8 @@ function CreatePostPage() {
               {loadingAction === "published" || loadingAction === "scheduled"
                 ? "Saving..."
                 : isEditMode
-                ? "Update Post"
-                : "Publish Now"}
+                  ? "Update Post"
+                  : "Publish Now"}
             </button>
           </div>
 
@@ -382,15 +511,24 @@ function CreatePostPage() {
 
         <aside className="space-y-4">
           <PostPreview
-            content={caption}
-            media={mediaUrl}
+            content={postData.caption}
+            media={postData.media}
             platform={previewPlatform}
             hashtags={hashtags}
-            onPlatformChange={setPreviewPlatform}
+            onPlatformChange={(platform) => {
+              setPreviewPlatform(platform);
+              updatePostData("platform", platform);
+            }}
+            availablePlatforms={previewablePlatforms}
+            title={postData.title}
+            description={postData.description}
+            thumbnail={postData.thumbnail}
           />
 
           <div className="rounded-2xl bg-[#efe4ff] px-4 py-3 text-xs font-semibold text-studio-primary dark:bg-[#3b2f68] dark:text-white">
-            Tip: Images with high contrast generally perform better on Instagram.
+            {isYouTubeSelected
+              ? "Tip: A strong YouTube title plus a custom thumbnail usually outperforms description-only uploads."
+              : "Tip: Images with high contrast generally perform better on Instagram."}
           </div>
         </aside>
       </div>

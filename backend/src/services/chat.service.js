@@ -27,6 +27,14 @@ export async function getChatById(chatId, userId) {
   return Chat.findOne({ _id: chatId, userId }).lean();
 }
 
+export async function deleteChatById(chatId, userId) {
+  return Chat.findOneAndDelete({ _id: chatId, userId }).lean();
+}
+
+export async function deleteChatsByUser(userId) {
+  return Chat.deleteMany({ userId });
+}
+
 export async function saveChat({ chatId, userId, title, messages }) {
   const resolvedTitle = title?.trim() || buildChatTitle(messages);
   const payload = {

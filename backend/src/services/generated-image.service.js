@@ -8,13 +8,13 @@ export async function listGeneratedImages(limit = 200) {
     .lean();
 }
 
-export async function getNextImageOrder() {
-  const latest = await GeneratedImage.findOne().sort({ order: -1 }).lean();
-  return typeof latest?.order === "number" ? latest.order + 1 : 0;
-}
-
 export async function createGeneratedImage(payload) {
   return GeneratedImage.create(payload);
+}
+
+export async function createGeneratedImageAtTop(payload) {
+  await GeneratedImage.updateMany({}, { $inc: { order: 1 } });
+  return createGeneratedImage({ ...payload, order: 0 });
 }
 
 export async function deleteGeneratedImageById(id) {

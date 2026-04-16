@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 const postSchema = new mongoose.Schema(
   {
     content: { type: String, required: true, trim: true },
+    title: { type: String, default: "", trim: true },
+    description: { type: String, default: "", trim: true },
     platforms: {
       type: [String],
       required: true,
@@ -11,6 +13,12 @@ const postSchema = new mongoose.Schema(
       }
     },
     mediaUrl: { type: String, default: "" },
+    thumbnailUrl: { type: String, default: "" },
+    type: {
+      type: String,
+      enum: ["image", "video"],
+      default: "image"
+    },
     status: {
       type: String,
       enum: ["draft", "scheduled", "published"],

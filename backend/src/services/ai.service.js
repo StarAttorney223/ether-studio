@@ -40,6 +40,10 @@ function normalizeHashtags(rawHashtags = []) {
     .slice(0, 5);
 }
 
+function isYouTubePlatform(platform = "") {
+  return String(platform).toLowerCase().includes("youtube");
+}
+
 function extractHashtags(content = "") {
   return normalizeHashtags(content.match(/#[\w-]+/g) || []);
 }
@@ -327,26 +331,64 @@ function parseCaptionPayload(content) {
   }
 }
 
+function parseYouTubePayload(content) {
+  try {
+    const normalized = content.replace(/```json|```/gi, "").trim();
+    const parsed = JSON.parse(normalized);
+    return {
+      title: String(parsed.title || "").trim(),
+      description: String(parsed.description || "").trim(),
+      hashtags: normalizeHashtags(parsed.hashtags)
+    };
+  } catch {
+    const lines = String(content)
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const title =
+      lines[0]?.replace(/^title:\s*/i, "").trim() ||
+      "YouTube Video Title";
+    const description = lines
+      .slice(1)
+      .join("\n")
+      .replace(/^description:\s*/i, "")
+      .trim();
+
+    return {
+      title,
+      description: stripHashtags(description || content),
+      hashtags: extractHashtags(content)
+    };
+  }
+}
+
 export async function generateOpenRouterCaption({ topic, platform, tone }) {
   if (!env.openRouterApiKey || env.openRouterApiKey === "or_xxx") {
     throw new Error("Missing OPENROUTER_API_KEY in backend environment.");
   }
 
   const format = detectContentFormat(topic);
+  const youtubeMode = isYouTubePlatform(platform);
   const prompt = [
-    `Create ${format} content for ${platform}.`,
-    `Topic: ${topic}.`,
-    `Tone: ${tone}.`,
+    youtubeMode
+      ? `Generate YouTube metadata for this topic: ${topic}.`
+      : `Create ${format} content for ${platform}.`,
+    youtubeMode ? `Target tone: ${tone}.` : `Topic: ${topic}.`,
+    youtubeMode ? "Return an engaging YouTube title and a discovery-friendly description." : `Tone: ${tone}.`,
     "Keep it concise, readable, and clean.",
     "Use short lines and natural spacing.",
     "Do not generate multiple options.",
     "Avoid large text blocks, separators like ---, and unnecessary hashtags.",
-    format === "caption"
-      ? "For captions, write 2 to 4 short lines and include 3 to 5 relevant hashtags only if needed."
-      : format === "script"
-        ? "For scripts, use Hook, Main Content, and Call to Action."
-        : "For carousels, use Slide 1, Slide 2, and continue only when needed.",
-    'Return strict JSON only in this format: {"caption":"...","hashtags":["#tag1","#tag2"]}'
+    youtubeMode
+      ? "Title should be clickable but not spammy. Description should be 2 to 4 short paragraphs. Add up to 5 relevant tags only if useful."
+      : format === "caption"
+        ? "For captions, write 2 to 4 short lines and include 3 to 5 relevant hashtags only if needed."
+        : format === "script"
+          ? "For scripts, use Hook, Main Content, and Call to Action."
+          : "For carousels, use Slide 1, Slide 2, and continue only when needed.",
+    youtubeMode
+      ? 'Return strict JSON only in this format: {"title":"...","description":"...","hashtags":["#tag1","#tag2"]}'
+      : 'Return strict JSON only in this format: {"caption":"...","hashtags":["#tag1","#tag2"]}'
   ].join(" ");
 
   const response = await fetch(OPENROUTER_URL, {
@@ -382,6 +424,17 @@ export async function generateOpenRouterCaption({ topic, platform, tone }) {
   const content = data?.choices?.[0]?.message?.content?.trim();
   if (!content) {
     throw new Error("OpenRouter returned an empty caption response.");
+  }
+
+  if (youtubeMode) {
+    const parsed = parseYouTubePayload(content);
+
+    return {
+      title: parsed.title || `YouTube video about ${topic}`,
+      description: parsed.description || `A YouTube description about ${topic}.`,
+      hashtags: parsed.hashtags,
+      caption: parsed.description || `A YouTube description about ${topic}.`
+    };
   }
 
   const parsed = parseCaptionPayload(content);

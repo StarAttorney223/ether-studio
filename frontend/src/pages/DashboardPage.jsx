@@ -79,10 +79,11 @@ function DashboardPage() {
 
     return posts.slice(0, 8).map((post) => ({
       id: post.id,
-      title: post.content.slice(0, 64) + (post.content.length > 64 ? "..." : ""),
-      description: post.content,
+      title: (post.title || post.content).slice(0, 64) + ((post.title || post.content).length > 64 ? "..." : ""),
+      description: post.description || post.content,
       tags: [(post.platforms?.[0] || "Instagram").toUpperCase(), post.status.toUpperCase()],
       image:
+        post.thumbnailUrl ||
         post.mediaUrl ||
         "https://images.unsplash.com/photo-1633419461186-7d40a38105ec?auto=format&fit=crop&w=1000&q=80"
     }));

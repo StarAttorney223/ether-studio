@@ -45,9 +45,27 @@ function resolveImageUrl(imageUrl) {
   return imageUrl || "";
 }
 
-function reorderItems(items, activeId, overId) {
-  const oldIndex = items.findIndex((item) => item.id === activeId);
-  const newIndex = items.findIndex((item) => item.id === overId);
+function matchesFilter(item, filter) {
+  if (filter === "all") return true;
+  if (filter === "reels") return item.aspectRatio === "9:16";
+  if (filter === "square") return item.aspectRatio === "1:1";
+  if (filter === "landscape") return item.aspectRatio === "16:9";
+  if (filter === "thumbnails") return item.type === "thumbnail";
+  if (filter === "favorites") return item.isFavorite;
+  return true;
+}
+
+function reorderItems(items, activeId, overId, activeFilter) {
+  const visibleItems = items.filter((item) => matchesFilter(item, activeFilter));
+  const movedItem = visibleItems.find((item) => item.id === activeId);
+  const targetItem = visibleItems.find((item) => item.id === overId);
+
+  if (!movedItem || !targetItem || movedItem.id === targetItem.id) {
+    return items;
+  }
+
+  const oldIndex = items.findIndex((item) => item.id === movedItem.id);
+  const newIndex = items.findIndex((item) => item.id === targetItem.id);
 
   if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) {
     return items;
@@ -208,17 +226,23 @@ function ImageGeneratorPage() {
     fetchImages();
   }, []);
 
+  useEffect(() => {
+    if (!selectedImage) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setSelectedImage(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedImage]);
+
   const filteredImages = useMemo(
-    () =>
-      images.filter((img) => {
-        if (filter === "all") return true;
-        if (filter === "reels") return img.aspectRatio === "9:16";
-        if (filter === "square") return img.aspectRatio === "1:1";
-        if (filter === "landscape") return img.aspectRatio === "16:9";
-        if (filter === "thumbnails") return img.type === "thumbnail";
-        if (filter === "favorites") return img.isFavorite;
-        return true;
-      }),
+    () => images.filter((img) => matchesFilter(img, filter)),
     [filter, images]
   );
 
@@ -256,7 +280,13 @@ function ImageGeneratorPage() {
       });
 
       setResult(item);
-      syncImages([...images, item].sort((a, b) => a.order - b.order));
+      setImages((prev) => [
+        item,
+        ...prev.map((existingItem, index) => ({
+          ...existingItem,
+          order: index + 1
+        }))
+      ]);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -307,16 +337,12 @@ function ImageGeneratorPage() {
   };
 
   const handleDragEnd = async (event) => {
-    if (filter !== "all") {
-      return;
-    }
-
     const { active, over } = event;
     if (!active?.id || !over?.id || active.id === over.id) {
       return;
     }
 
-    const nextImages = reorderItems(images, active.id, over.id);
+    const nextImages = reorderItems(images, active.id, over.id, filter);
     await persistReorder(nextImages);
   };
 
@@ -501,7 +527,7 @@ function ImageGeneratorPage() {
           ))}
         </div>
 
-        {filter === "all" && filteredImages.length > 1 && (
+        {filteredImages.length > 1 && (
           <p className="text-sm text-gray-500 dark:text-gray-300">
             Drag images using the handle to reorder your gallery.
           </p>
@@ -529,7 +555,7 @@ function ImageGeneratorPage() {
                   key={item.id}
                   item={item}
                   isUniformGrid={isUniformGrid}
-                  isDraggable={filter === "all"}
+                  isDraggable={filteredImages.length > 1}
                   onDelete={handleDelete}
                   onOpen={setSelectedImage}
                   onToggleFavorite={toggleFavorite}
@@ -541,9 +567,16 @@ function ImageGeneratorPage() {
       </section>
 
       {selectedImage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-          <div className="relative w-full max-w-5xl rounded-[1.5rem] bg-white p-4 shadow-2xl dark:bg-gray-900">
-            <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm pointer-events-auto"
+            onClick={() => setSelectedImage(null)}
+          />
+          <div
+            className="relative z-50 mx-4 w-full max-w-5xl rounded-[1.5rem] bg-white p-4 shadow-2xl pointer-events-auto dark:bg-gray-900"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3 pr-12">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.08em] text-studio-primary">
                   {selectedImage.type === "thumbnail" ? "Thumbnail" : "Image"} | {selectedImage.aspectRatio}
@@ -554,28 +587,20 @@ function ImageGeneratorPage() {
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <a
-                  href={resolveImageUrl(selectedImage.imageUrl)}
-                  download={`studio-${selectedImage.type}-${selectedImage.id}.png`}
-                  className="inline-flex h-10 items-center gap-2 rounded-full bg-gray-100 px-4 text-sm font-semibold text-gray-900 dark:bg-gray-800 dark:text-white"
-                >
-                  <Download size={16} /> Download
-                </a>
-                <button
-                  type="button"
-                  onClick={() => setSelectedImage(null)}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white"
-                >
-                  <X size={18} />
-                </button>
-              </div>
             </div>
+            <button
+              type="button"
+              onClick={() => setSelectedImage(null)}
+              className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black/85"
+              aria-label="Close preview"
+            >
+              <X size={18} />
+            </button>
             <div className="relative overflow-hidden rounded-xl bg-gray-100 p-3 dark:bg-gray-800">
               <img
                 src={resolveImageUrl(selectedImage.imageUrl)}
                 alt={selectedImage.prompt || "Preview"}
-                className="max-h-[80vh] w-full object-contain"
+                className="max-h-[85vh] w-full rounded-lg object-contain"
               />
               {selectedImage.textOverlay && (
                 <div className="pointer-events-none absolute inset-3 flex items-start justify-center bg-gradient-to-t from-black/65 via-black/10 to-black/45 p-4">
@@ -584,6 +609,13 @@ function ImageGeneratorPage() {
                   </p>
                 </div>
               )}
+              <a
+                href={resolveImageUrl(selectedImage.imageUrl)}
+                download={`studio-${selectedImage.type}-${selectedImage.id}.png`}
+                className="absolute bottom-3 right-3 inline-flex h-10 items-center gap-2 rounded-full bg-violet-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-violet-500"
+              >
+                <Download size={16} /> Download
+              </a>
             </div>
           </div>
         </div>

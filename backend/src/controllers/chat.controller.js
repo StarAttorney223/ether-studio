@@ -1,4 +1,6 @@
 import {
+  deleteChatById,
+  deleteChatsByUser,
   getChatById,
   listChatsByUser,
   normalizeChatResponse,
@@ -65,5 +67,34 @@ export async function saveChatController(req, res) {
   return res.status(chatId ? 200 : 201).json({
     success: true,
     data: normalizeChatResponse(chat)
+  });
+}
+
+export async function deleteChatController(req, res) {
+  const deletedChat = await deleteChatById(req.params.id, req.user._id);
+
+  if (!deletedChat) {
+    return res.status(404).json({ success: false, message: "Chat not found" });
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: "Chat deleted"
+  });
+}
+
+export async function deleteAllChatsController(req, res) {
+  const requestedUserId = String(req.params.userId || "");
+  const authenticatedUserId = String(req.user._id);
+
+  if (requestedUserId !== "me" && requestedUserId !== authenticatedUserId) {
+    return res.status(403).json({ success: false, message: "You can only delete your own chats" });
+  }
+
+  await deleteChatsByUser(req.user._id);
+
+  return res.status(200).json({
+    success: true,
+    message: "All chats deleted"
   });
 }

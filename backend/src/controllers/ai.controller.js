@@ -1,7 +1,7 @@
 import { GeneratedContent } from "../models/GeneratedContent.js";
 import { generateCaption, chatWithAssistant, generateOpenRouterCaption } from "../services/ai.service.js";
 import { generateImageFromPrompt } from "../services/image.service.js";
-import { createGeneratedImage, getNextImageOrder } from "../services/generated-image.service.js";
+import { createGeneratedImageAtTop } from "../services/generated-image.service.js";
 
 export async function generateContentController(req, res) {
   const { topic, platform, tone, optimize } = req.body;
@@ -68,14 +68,13 @@ export async function generateImageController(req, res) {
     textOverlay
   });
 
-  const savedImage = await createGeneratedImage({
+  const savedImage = await createGeneratedImageAtTop({
     imageUrl: imageUrl.url,
     imagePublicId: imageUrl.publicId,
     prompt,
     aspectRatio: resolvedAspectRatio,
     type: resolvedType,
-    textOverlay,
-    order: await getNextImageOrder()
+    textOverlay
   });
 
   return res.status(200).json({
@@ -138,6 +137,8 @@ export async function generateCaptionAiController(req, res) {
   return res.status(200).json({
     success: true,
     data: {
+      title: result.title || "",
+      description: result.description || "",
       caption: result.caption,
       hashtags: result.hashtags
     }
