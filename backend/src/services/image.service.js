@@ -32,8 +32,41 @@ async function toDataUrlFromResponse(response) {
   return `data:${contentType};base64,${base64}`;
 }
 
-export async function generateImageFromPrompt({ prompt, aspectRatio, style, lighting }) {
-  const input = `Create an image. Prompt: ${prompt}. Aspect Ratio: ${aspectRatio}. Style: ${style}. Lighting: ${lighting}.`;
+function buildImagePrompt({ prompt, aspectRatio, style, lighting, mode, textOverlay }) {
+  const parts = [
+    "Create an image.",
+    `Prompt: ${prompt}.`,
+    `Aspect Ratio: ${aspectRatio}.`,
+    `Style: ${style}.`,
+    `Lighting: ${lighting}.`
+  ];
+
+  if (mode === "thumbnail") {
+    parts.push(
+      "Generate a high-contrast thumbnail with bold composition, attention-grabbing visuals, a centered subject, and clear space for text.",
+      "high contrast, bold lighting, cinematic, youtube thumbnail style, vibrant colors, sharp focus, dramatic composition."
+    );
+
+    if (textOverlay?.trim()) {
+      parts.push(
+        `Incorporate this headline as prominent overlay text: "${textOverlay.trim()}".`,
+        "Use a large bold font positioned near the center or top for readability."
+      );
+    }
+  }
+
+  return parts.join(" ");
+}
+
+export async function generateImageFromPrompt({
+  prompt,
+  aspectRatio,
+  style,
+  lighting,
+  mode = "image",
+  textOverlay = ""
+}) {
+  const input = buildImagePrompt({ prompt, aspectRatio, style, lighting, mode, textOverlay });
 
   const candidateModels = [
     env.huggingFaceImageModel,
@@ -67,7 +100,7 @@ export async function generateImageFromPrompt({ prompt, aspectRatio, style, ligh
     }
   }
 
-  const fallbackResponse = await fetch(buildPollinationsUrl(prompt, aspectRatio)).catch(() => null);
+  const fallbackResponse = await fetch(buildPollinationsUrl(input, aspectRatio)).catch(() => null);
   if (fallbackResponse?.ok) {
     return toDataUrlFromResponse(fallbackResponse);
   }

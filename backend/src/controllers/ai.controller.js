@@ -24,19 +24,35 @@ export async function generateContentController(req, res) {
 }
 
 export async function generateImageController(req, res) {
-  const { prompt, aspectRatio = "16:9", style = "Photorealistic", lighting = "Golden Hour" } = req.body;
+  const {
+    prompt,
+    aspectRatio = "16:9",
+    style = "Photorealistic",
+    lighting = "Golden Hour",
+    mode = "image",
+    textOverlay = ""
+  } = req.body;
 
   if (!prompt) {
     return res.status(400).json({ success: false, message: "prompt is required" });
   }
 
-  const imageUrl = await generateImageFromPrompt({ prompt, aspectRatio, style, lighting });
+  const imageUrl = await generateImageFromPrompt({
+    prompt,
+    aspectRatio,
+    style,
+    lighting,
+    mode,
+    textOverlay
+  });
 
   return res.status(200).json({
     success: true,
     data: {
       imageUrl,
-      prompt
+      prompt,
+      mode,
+      textOverlay
     }
   });
 }
