@@ -1,0 +1,97 @@
+﻿@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  @apply m-0 bg-studio-bg font-sans text-studio-text;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.studio-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.studio-scrollbar::-webkit-scrollbar-thumb {
+  background: #c7cedb;
+  border-radius: 10px;
+}
+
+.dark .studio-scrollbar::-webkit-scrollbar-thumb {
+  background: #4b5563;
+}
+
+.studio-animate-in {
+  animation: studioFadeInUp 0.45s ease both;
+}
+
+@keyframes studioFadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dark body {
+  background: #080b16;
+  color: #e4e9f5;
+}
+
+.dark .bg-studio-bg {
+  background-color: #080b16 !important;
+}
+
+.dark .bg-studio-soft {
+  background-color: #251f48 !important;
+}
+
+.dark .border-slate-200,
+.dark .border-slate-100 {
+  border-color: #273453 !important;
+}
+
+.dark input,
+.dark textarea,
+.dark select {
+  color: #e4e9f5;
+}
+
+.dark .shadow-soft,
+.dark .shadow-glow {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35) !important;
+}
+
+.studio-search {
+  max-width: 760px;
+}
+
+.dark .studio-topbar {
+  background: #04060d !important;
+  border-bottom-color: #2f2655 !important;
+}
+
+.dark .studio-theme-switch {
+  background: #513c91 !important;
+}
+
+.dark .hover\:bg-rose-50:hover {
+  background-color: rgba(248, 113, 113, 0.12) !important;
+}

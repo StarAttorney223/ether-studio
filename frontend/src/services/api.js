@@ -1,0 +1,62 @@
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
+const AUTH_TOKEN_KEY = "studio-auth-token";
+
+export function getAuthToken() {
+  return localStorage.getItem(AUTH_TOKEN_KEY) || "";
+}
+
+export function setAuthToken(token) {
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+}
+
+export function clearAuthToken() {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
+async function request(path, options = {}) {
+  const token = getAuthToken();
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {})
+    },
+    ...options
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.message || "Request failed");
+  }
+
+  return data;
+}
+
+export const api = {
+  register: (payload) => request("/auth/register", { method: "POST", body: JSON.stringify(payload) }),
+  login: (payload) => request("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
+  getCurrentUser: () => request("/auth/me"),
+  updateProfile: (payload) => request("/auth/profile", { method: "PUT", body: JSON.stringify(payload) }),
+  getChats: () => request("/chat"),
+  getChatById: (id) => request(`/chat/${id}`),
+  saveChat: (payload) => request("/chat/save", { method: "POST", body: JSON.stringify(payload) }),
+  getAnalytics: () => request("/analytics"),
+  getPosts: () => request("/posts"),
+  getDraftPosts: () => request("/posts/drafts"),
+  getPostById: (id) => request(`/posts/${id}`),
+  getScheduledPosts: () => request("/posts/scheduled"),
+  createPost: (payload) => request("/posts", { method: "POST", body: JSON.stringify(payload) }),
+  updatePost: (id, payload) => request(`/posts/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deletePost: (id) => request(`/posts/${id}`, { method: "DELETE" }),
+  generateAICaption: (payload) =>
+    request("/ai/generate-caption", { method: "POST", body: JSON.stringify(payload) }),
+  generateContent: (payload) =>
+    request("/generate-content", { method: "POST", body: JSON.stringify(payload) }),
+  generateImage: (payload) =>
+    request("/generate-image", { method: "POST", body: JSON.stringify(payload) }),
+  chat: (payload) => request("/chat", { method: "POST", body: JSON.stringify(payload) }),
+  schedulePost: (payload) =>
+    request("/schedule-post", { method: "POST", body: JSON.stringify(payload) }),
+  deleteScheduledPost: (id) => request(`/schedule-post/${id}`, { method: "DELETE" })
+};
