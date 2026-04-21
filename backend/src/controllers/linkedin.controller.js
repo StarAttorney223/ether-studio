@@ -9,7 +9,8 @@ import {
 import { getProfile, createPost } from "../services/linkedin.service.js";
 
 const LINKEDIN_SCOPES = ["openid", "profile", "email", "w_member_social"];
-const DEFAULT_FRONTEND_URL = "http://localhost:5173";
+// const DEFAULT_FRONTEND_URL = "http://localhost:5173";
+const DEFAULT_FRONTEND_URL = env.frontendUrl;
 const DEFAULT_REDIRECT_PATH = "/create-post";
 
 async function parseLinkedInResponse(response) {
