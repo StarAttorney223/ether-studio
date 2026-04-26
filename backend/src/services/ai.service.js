@@ -1,13 +1,16 @@
 import { env } from "../config/env.js";
+import * as trendingService from "./trending.service.js";
 
 const HF_API_URL = "https://router.huggingface.co/hf-inference/models";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 
 const CONTENT_REQUEST_PATTERN =
-  /\b(generate|write|create|draft|caption|post|script|carousel|thread|copy|content|linkedin post|instagram caption|youtube script|ad copy)\b/i;
+  /\b(generate|write|create|draft|caption|post|script|carousel|thread|copy|content|linkedin post|instagram caption|youtube script|youtube description|ad copy|metadata|description)\b/i;
 const DETAILED_REQUEST_PATTERN =
-  /\b(detailed|detail|longer|in-depth|comprehensive|step by step|full version|deep dive)\b/i;
+  /\b(detailed|detail|longer|in-depth|comprehensive|step by step|full version|deep dive|lengthy|long)\b/i;
+const TREND_INTENT_PATTERN =
+  /\b(latest news|trending|viral|what should i post|whats hot|latest trends)\b/i;
 
 function wantsDetailedResponse(text = "") {
   return DETAILED_REQUEST_PATTERN.test(String(text));
@@ -17,14 +20,25 @@ function detectResponseMode(message = "") {
   return CONTENT_REQUEST_PATTERN.test(String(message)) ? "content" : "chat";
 }
 
-function detectContentFormat(text = "") {
-  const normalized = String(text).toLowerCase();
+function detectContentType(topic = "") {
+  const norm = String(topic).toLowerCase();
+  
+  if (norm.includes("youtube") || norm.includes("description") || norm.includes("metadata")) {
+    return "youtube_description";
+  }
 
-  if (normalized.includes("script")) {
+  if (norm.includes("script")) {
+    if (norm.includes("reel") || norm.includes("short") || norm.includes("tiktok") || norm.includes("insta")) {
+      return "short_video_script";
+    }
     return "script";
   }
 
-  if (normalized.includes("carousel")) {
+  if (norm.includes("linkedin") || norm.includes("professional post")) {
+    return "linkedin_post";
+  }
+
+  if (norm.includes("carousel") || norm.includes("slides")) {
     return "carousel";
   }
 
@@ -101,36 +115,69 @@ async function describeUploadedImage(imageContext) {
 
 function buildContentPrompt({ topic, platform, tone, optimize, format, detailed, imageSummary }) {
   const formatRules = {
-    caption:
-      "For captions, write 2 to 4 short lines. Add 3 to 5 relevant hashtags only if they genuinely fit.",
-    script:
-      "For scripts, use exactly these labels on separate lines: Hook, Main Content, Call to Action. Keep each section concise and readable.",
-    carousel:
-      "For carousels, format as Slide 1, Slide 2, and continue only as needed. Keep each slide short and clear."
+    youtube_description: `
+Write a detailed, discovery-friendly YouTube description (150–300 words).
+Structure:
+- Hook: High-energy opening sentence.
+- Summary: 2 insightful paragraphs about the value provided.
+- SEO Keywords: Top 5 keywords integrated naturally.
+- Call to Action: Clear instruction for viewers.`,
+    
+    short_video_script: `
+Write a high-retention script for a 60-second video (Reel/Short/TikTok).
+Structure:
+- Hook (0-3 sec): Pattern interrupt or bold claim.
+- Main Body: 3-4 punchy, value-dense bullet points.
+- Ending CTA: Fast and clear.`,
+
+    script: `
+Write a professional long-form script.
+Structure:
+- Opening: Set the stage.
+- Main Content: In-depth exploration with headings.
+- Conclusion: Summary and CTA.`,
+
+    linkedin_post: `
+Write a professional, high-authority LinkedIn post.
+Structure:
+- Strong Opening: 1-2 powerful lines.
+- Insightful Body: Use bullet points for readability.
+- Reflection: A closing thought on the topic.
+- CTA: Encourage comments or shares.`,
+
+    carousel: `
+Write content for a 5-10 slide educational carousel.
+Structure:
+- Slide 1: Catchy Title.
+- Slides 2-N: One key insight per slide.
+- Final Slide: Summary and CTA.`,
+
+    caption: `
+Write a high-converting social media caption.
+Structure:
+- Hook: Grab attention.
+- Body: 2-4 lines of engaging context.
+- CTA: Direct the audience.`
   };
 
   return [
-    `Create ${format} content for ${platform}.`,
-    `Topic: ${topic}.`,
-    `Tone: ${tone}.`,
-    optimize
-      ? "Make it engaging and polished, but do not make it feel overloaded."
-      : "Keep it clean and straightforward.",
-    imageSummary
-      ? `User has provided an image. Analyze its content and incorporate it into the response. Image context: ${imageSummary}`
-      : "",
-    "Output must be clean, structured, and easy to scan.",
-    "Use short paragraphs with line breaks between ideas.",
-    "Do not generate multiple options.",
-    "Do not overuse symbols, markdown decoration, unnecessary hashtags, or separators like ---.",
-    "Do not add image suggestions automatically.",
-    detailed
-      ? "The user asked for detail, so provide a fuller version while staying readable."
-      : "Keep responses concise unless the user explicitly asks for detailed output.",
+    `ACT AS AN EXPERT COPYWRITER. Create the following: ${format.replace(/_/g, " ")}.`,
+    `Platform: ${platform}.`,
+    `Primary Topic: ${topic}.`,
+    `Target Tone: ${tone}.`,
+    optimize ? "Focus on high engagement metrics and visual readability." : "",
+    imageSummary ? `Reference Image Context: ${imageSummary}` : "",
+    "\nSTRICT FORMATTING RULES:",
+    "- Use clean line breaks between every section.",
+    "- Output must be professional and scan-friendly.",
+    "- No placeholder text like [Insert Name].",
+    "- No multiple options.",
+    "- Maximize the context provided in the topic.",
+    "\nSPECIFIC STRUCTURE REQUIREMENTS:",
     formatRules[format] || formatRules.caption
   ]
     .filter(Boolean)
-    .join(" ");
+    .join("\n");
 }
 
 function buildChatPrompt({ message, context, detailed }) {
@@ -210,7 +257,7 @@ async function generateWithHuggingFace(payload) {
       },
       body: JSON.stringify({
         inputs: prompt,
-        parameters: { max_new_tokens: 260, temperature: payload.mode === "chat" ? 0.8 : 0.7, return_full_text: false }
+        parameters: { max_new_tokens: 800, temperature: payload.mode === "chat" ? 0.8 : 0.7, return_full_text: false }
       })
     });
 
@@ -244,6 +291,7 @@ async function generateWithOpenRouter(payload) {
     body: JSON.stringify({
       model: env.openRouterModel,
       temperature: payload.mode === "chat" ? 0.85 : 0.7,
+      max_tokens: 1000,
       messages: buildOpenRouterMessages(payload)
     })
   });
@@ -276,7 +324,7 @@ async function generateText(payload) {
 }
 
 export async function generateCaption({ topic, platform, tone, optimize, imageContext = null }) {
-  const format = detectContentFormat(topic);
+  const format = detectContentType(topic);
   const imageSummary = await describeUploadedImage(imageContext);
 
   return generateText({
@@ -292,6 +340,25 @@ export async function generateCaption({ topic, platform, tone, optimize, imageCo
 }
 
 export async function chatWithAssistant({ message, context }) {
+  const normMessage = String(message).toLowerCase();
+  
+  // Detect real-time trend intent
+  if (TREND_INTENT_PATTERN.test(normMessage) || /\b(latest|news|viral|trending|hot|post|ideas|tools|startup)\b/i.test(normMessage)) {
+    try {
+      const liveData = await trendingService.getTrendsByTopic(message);
+      if (liveData && liveData.length > 0) {
+        let responseText = `I've scouted the latest real-time topics for you. Here is what's RESONATING right now:\n\n`;
+        liveData.slice(0, 10).forEach((topic, idx) => {
+          responseText += `${idx + 1}. ${topic}\n`;
+        });
+        responseText += "\nClick any of these to manifest content, or tell me if you want to explore a different angle!";
+        return responseText;
+      }
+    } catch (err) {
+      console.error("Chat trending fetch failed:", err);
+    }
+  }
+
   const mode = detectResponseMode(message);
 
   if (mode === "content") {
@@ -301,7 +368,7 @@ export async function chatWithAssistant({ message, context }) {
       platform: context || "Instagram / LinkedIn",
       tone: "Helpful and clear",
       optimize: true,
-      format: detectContentFormat(message),
+      format: detectContentType(message),
       detailed: wantsDetailedResponse(message),
       imageSummary: ""
     });
@@ -367,7 +434,7 @@ export async function generateOpenRouterCaption({ topic, platform, tone }) {
     throw new Error("Missing OPENROUTER_API_KEY in backend environment.");
   }
 
-  const format = detectContentFormat(topic);
+  const format = detectContentType(topic);
   const youtubeMode = isYouTubePlatform(platform);
   const prompt = [
     youtubeMode
@@ -380,12 +447,14 @@ export async function generateOpenRouterCaption({ topic, platform, tone }) {
     "Do not generate multiple options.",
     "Avoid large text blocks, separators like ---, and unnecessary hashtags.",
     youtubeMode
-      ? "Title should be clickable but not spammy. Description should be 2 to 4 short paragraphs. Add up to 5 relevant tags only if useful."
+      ? "Title should be clickable but not spammy. Description should be 2 to 4 short paragraphs. Add up to 5 relevant tags only if useful. Do not use Hook/Action labels."
       : format === "caption"
         ? "For captions, write 2 to 4 short lines and include 3 to 5 relevant hashtags only if needed."
         : format === "script"
           ? "For scripts, use Hook, Main Content, and Call to Action."
-          : "For carousels, use Slide 1, Slide 2, and continue only when needed.",
+          : format === "description"
+            ? "For descriptions, write 2 to 3 engaging paragraphs without labels like Hook or CTA."
+            : "For carousels, use Slide 1, Slide 2, and continue only when needed.",
     youtubeMode
       ? 'Return strict JSON only in this format: {"title":"...","description":"...","hashtags":["#tag1","#tag2"]}'
       : 'Return strict JSON only in this format: {"caption":"...","hashtags":["#tag1","#tag2"]}'
@@ -443,4 +512,48 @@ export async function generateOpenRouterCaption({ topic, platform, tone }) {
     caption: parsed.caption || `Sharing thoughts about ${topic} on ${platform}.`,
     hashtags: parsed.hashtags
   };
+}
+
+export async function getLatestTrends(topic = "") {
+  const currentYear = new Date().getFullYear();
+  const prompt = topic
+    ? `Identify 5 VIRAL TRENDS related to "${topic}" for ${currentYear}. 
+       STRICT RULES:
+       1. Response MUST be valid JSON only: {"topics": ["Short Trend 1", "Short Trend 2", ...], "hashtags": ["#tag1", ...]}
+       2. Each topic MUST be 2-3 WORDS MAX. e.g., "2026 Tech Trends", "Minimalist AI Art".
+       3. NO SENTENCES. NO GREETINGS.`
+    : `Identify 5 GLOBAL VIRAL TRENDS for ${currentYear}.
+       STRICT RULES:
+       1. Response MUST be valid JSON only: {"topics": ["Short Trend 1", "Short Trend 2", ...], "hashtags": ["#tag1", ...]}
+       2. Each topic MUST be 2-3 WORDS MAX. e.g., "Viral Fashion Challenges", "AI Music Trends".
+       3. NO SENTENCES. NO GREETINGS.`;
+
+  const payload = {
+    mode: "chat",
+    message: prompt,
+    detailed: false
+  };
+
+  const response = await generateText(payload);
+  
+  try {
+    const jsonStr = response.match(/\{[\s\S]*\}/)?.[0] || response;
+    const parsed = JSON.parse(jsonStr.trim());
+    
+    return {
+      topics: (parsed.topics || []).map(t => String(t).slice(0, 35)).slice(0, 5),
+      hashtags: (parsed.hashtags || []).map(t => t.startsWith("#") ? t : `#${t}`).slice(0, 10)
+    };
+  } catch (e) {
+    const allHashtags = Array.from(new Set(extractHashtags(response))).slice(0, 10);
+    const topics = response.split("\n")
+      .map(line => line.trim().replace(/^[-*•\d.]+\s*/, ""))
+      .filter(line => line.length > 3 && line.length < 35 && !line.includes("#") && line.split(" ").length < 5)
+      .slice(0, 5);
+
+    return { 
+      topics: topics.length > 0 ? topics : [`${currentYear} Tech Trends`, "Viral AI News", "Short Video Hacks", "Sustainable Living", "Digital Wellness"],
+      hashtags: allHashtags.length > 0 ? allHashtags : ["#trending", "#viral", "#socialmedia", "#contentcreator", "#ai", "#growth", "#innovation", "#community", "#strategy", "#future"]
+    };
+  }
 }

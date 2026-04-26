@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { Sparkles } from "lucide-react";
 import { api } from "../services/api";
+import TrendingTopicsModal from "../components/dashboard/TrendingTopicsModal";
 
 function ContentGeneratorPage() {
   const [hashtags, setHashtags] = useState([]);
@@ -9,32 +10,53 @@ function ContentGeneratorPage() {
     topic: "",
     platform: "Instagram",
     tone: "Professional",
+    type: "Auto-Detect",
+    length: "Medium",
     optimize: true
   });
+
   const [trends, setTrends] = useState({ topics: [], hashtags: [] });
-  const [loadingTrends, setLoadingTrends] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [output, setOutput] = useState("Craft your next social caption in one click.");
   const [isEditing, setIsEditing] = useState(false);
   const [editedOutput, setEditedOutput] = useState(output);
 
+  const [isTrendingModalOpen, setIsTrendingModalOpen] = useState(false);
+  const [modalTopics, setModalTopics] = useState([]);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalTitle, setModalTitle] = useState("");
+
+  const fetchInitialTrends = async () => {
+    try {
+      const resp = await api.getTrendsByTopic("Viral Topics");
+      const results = resp.data || resp || [];
+      setTrends({ topics: results, hashtags: [] });
+    } catch (err) {
+      console.error("[Generator] Background trends fetch failed:", err);
+    }
+  };
+
   useEffect(() => {
-    setEditedOutput(output);
-  }, [output]);
+    fetchInitialTrends();
+  }, []);
 
-  const currentText = isEditing ? editedOutput : output;
-
-  const handleGenerate = async () => {
+  const handleGenerate = async (customTopic = null) => {
     setLoading(true);
     setError("");
 
+    const activeTopic = customTopic || form.topic;
+    const finalTopic = form.type !== "Auto-Detect" 
+      ? `${form.type}: ${activeTopic}` 
+      : activeTopic;
+
     try {
       const payload = new FormData();
-      payload.append("topic", form.topic);
+      payload.append("topic", finalTopic);
       payload.append("platform", form.platform);
       payload.append("tone", form.tone);
       payload.append("optimize", String(form.optimize));
+      payload.append("length", form.length);
 
       if (imageFile) {
         payload.append("image", imageFile);
@@ -51,24 +73,33 @@ function ContentGeneratorPage() {
     }
   };
 
-  const handleFetchTrends = async () => {
-    setLoadingTrends(true);
+  const openTrendingModal = async (type) => {
+    setModalTitle(type);
+    setIsTrendingModalOpen(true);
+    setModalLoading(true);
     try {
-      const resp = await api.getTrends(form.topic);
-      setTrends(resp.data || { topics: [], hashtags: [] });
+      const resp = await api.getTrendsByTopic(type);
+      const results = resp.data || resp || [];
+      setModalTopics(results);
+      setTrends({ topics: results, hashtags: [] });
     } catch (err) {
-      console.error("Trends fetch failed", err);
+      console.error("Fetch trends error:", err);
     } finally {
-      setLoadingTrends(false);
+      setModalLoading(false);
     }
   };
 
+  const handleModalSelect = async (topic) => {
+    setIsTrendingModalOpen(false);
+    setForm(prev => ({ ...prev, topic }));
+    handleGenerate(topic);
+  };
+
   useEffect(() => {
-    if (form.topic.length > 5 && !loadingTrends) {
-      const timeout = setTimeout(handleFetchTrends, 1500);
-      return () => clearTimeout(timeout);
-    }
-  }, [form.topic]);
+    setEditedOutput(output);
+  }, [output]);
+
+  const currentText = isEditing ? editedOutput : output;
 
   const handleImageUpload = (event) => {
     const file = event.target.files?.[0] || null;
@@ -115,6 +146,35 @@ function ContentGeneratorPage() {
             placeholder="What should your post be about?"
           />
         </label>
+
+        <div className="grid grid-cols-2 gap-4">
+          <label className="space-y-2">
+            <span className="text-sm font-semibold uppercase tracking-[0.08em] text-studio-primary">Content Type</span>
+            <select
+              value={form.type}
+              onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value }))}
+              className="h-12 w-full rounded-full border border-gray-200 bg-white px-4 text-sm text-gray-900 outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+            >
+              <option>Auto-Detect</option>
+              <option>Caption</option>
+              <option>Script</option>
+              <option>YouTube Description</option>
+              <option>LinkedIn Post</option>
+            </select>
+          </label>
+          <label className="space-y-2">
+            <span className="text-sm font-semibold uppercase tracking-[0.08em] text-studio-primary">Target Length</span>
+            <select
+              value={form.length}
+              onChange={(e) => setForm((prev) => ({ ...prev, length: e.target.value }))}
+              className="h-12 w-full rounded-full border border-gray-200 bg-white px-4 text-sm text-gray-900 outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+            >
+              <option>Short</option>
+              <option>Medium</option>
+              <option>Long</option>
+            </select>
+          </label>
+        </div>
 
         <label className="block space-y-2">
           <span className="text-sm font-semibold uppercase tracking-[0.08em] text-studio-primary">Reference Image</span>
@@ -182,24 +242,26 @@ function ContentGeneratorPage() {
 
         {/* Trends Section */}
         <section className="space-y-4 rounded-3xl border border-gray-100 bg-white/50 p-6 shadow-sm ring-1 ring-black/[0.02] transition-all dark:border-gray-700 dark:bg-gray-800/50">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-studio-primary opacity-75"></span>
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-studio-primary"></span>
-                </span>
-                <h3 className="text-[0.7rem] font-bold uppercase tracking-[0.12em] text-studio-primary">Trending Now</h3>
-              </div>
+          <div className="space-y-3">
+            <div className="flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-studio-primary opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-studio-primary"></span>
+              </span>
+              <h3 className="text-[0.7rem] font-bold uppercase tracking-[0.12em] text-studio-primary">Discover Trends</h3>
             </div>
-            <button 
-              onClick={handleFetchTrends}
-              disabled={loadingTrends}
-              className="group flex items-center gap-1 text-[0.7rem] font-bold uppercase tracking-wider text-gray-400 hover:text-studio-primary disabled:opacity-50"
-            >
-              <Sparkles size={10} className={loadingTrends ? "animate-spin" : "group-hover:animate-pulse"} />
-              {loadingTrends ? "Scouting..." : "Refresh"}
-            </button>
+            
+            <div className="flex flex-wrap gap-2">
+              {["Viral Topics", "Breaking News", "Startup Ideas", "AI Tools", "YouTube Ideas"].map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => openTrendingModal(cat)}
+                  className="rounded-full bg-studio-primary/10 px-3 py-1 text-[10px] font-bold text-studio-primary transition-all hover:bg-studio-primary hover:text-white"
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
           </div>
           
           <div className="space-y-2.5">
@@ -242,7 +304,7 @@ function ContentGeneratorPage() {
             ) : (
               <div className="py-8 text-center">
                 <div className="mx-auto mb-2 h-1 w-12 rounded-full bg-gray-100 dark:bg-gray-700"></div>
-                <p className="text-xs text-gray-400 italic">Type a topic to fetch real-time trends...</p>
+                <p className="text-xs text-gray-400 italic">Select a category above to scout live topics...</p>
               </div>
             )}
           </div>
@@ -325,6 +387,15 @@ function ContentGeneratorPage() {
           </button>
         </div>
       </section>
+      <TrendingTopicsModal 
+        isOpen={isTrendingModalOpen}
+        onClose={() => setIsTrendingModalOpen(false)}
+        activeCategory={modalTitle}
+        topics={modalTopics}
+        loading={modalLoading}
+        onRefresh={() => openTrendingModal(modalTitle)}
+        onSelect={handleModalSelect}
+      />
     </div>
   );
 }

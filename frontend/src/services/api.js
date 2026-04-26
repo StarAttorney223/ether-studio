@@ -80,5 +80,10 @@ export const api = {
   schedulePost: (payload) =>
     request("/schedule-post", { method: "POST", body: JSON.stringify(payload) }),
   deleteScheduledPost: (id) => request(`/schedule-post/${id}`, { method: "DELETE" }),
-  getTrends: (topic = "") => request(`/trends${topic ? `?topic=${encodeURIComponent(topic)}` : ""}`)
+  getTrends: (topic = "") => request(`/trends${topic ? `?topic=${encodeURIComponent(topic)}` : ""}`),
+  getRedditTrends: () => request("/trending/reddit"),
+  getGNewsTrends: () => request("/trending/news"),
+  getCombinedTrends: () => request("/trending/all"),
+  getDynamicTrends: (prompt) => request(`/trending/dynamic?prompt=${encodeURIComponent(prompt)}`),
+  getTrendsByTopic: (topic) => request(`/trending/by-topic?topic=${encodeURIComponent(topic)}`)
 };

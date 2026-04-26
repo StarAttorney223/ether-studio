@@ -1,5 +1,5 @@
 import { GeneratedContent } from "../models/GeneratedContent.js";
-import { generateCaption, chatWithAssistant, generateOpenRouterCaption } from "../services/ai.service.js";
+import { generateCaption, chatWithAssistant, generateOpenRouterCaption, getLatestTrends } from "../services/ai.service.js";
 import { generateImageFromPrompt } from "../services/image.service.js";
 import { createGeneratedImageAtTop } from "../services/generated-image.service.js";
 
@@ -142,5 +142,15 @@ export async function generateCaptionAiController(req, res) {
       caption: result.caption,
       hashtags: result.hashtags
     }
+  });
+}
+
+export async function getTrendsController(req, res) {
+  const { topic } = req.query;
+  const trends = await getLatestTrends(topic);
+
+  return res.status(200).json({
+    success: true,
+    data: trends
   });
 }

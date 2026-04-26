@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import Toast from "../components/common/Toast";
 import PostCardSkeleton from "../components/common/PostCardSkeleton";
 import StatCard from "../components/common/StatCard";
+import TrendingTopicsModal from "../components/dashboard/TrendingTopicsModal";
 import { dashboardStats, pipelineItems } from "../data/mockData";
 import { api } from "../services/api";
 
@@ -53,6 +54,12 @@ function DashboardPage() {
   const [activeCategory, setActiveCategory] = useState("trending");
   const [liveTrends, setLiveTrends] = useState([]);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
+
+  // Trending Modal State
+  const [isTrendingModalOpen, setIsTrendingModalOpen] = useState(false);
+  const [modalTopics, setModalTopics] = useState([]);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalTitle, setModalTitle] = useState("");
 
   useEffect(() => {
     if (!toast.message) return undefined;
@@ -105,31 +112,31 @@ function DashboardPage() {
 
     if (!analytics?.metrics) {
       return [
-        { label: "Total Posts", value: totalPosts.toString(), badge: "+12%" },
-        { label: "Scheduled", value: scheduledPosts.toString(), badge: "Next 24h" },
-        dashboardStats[2],
-        dashboardStats[3]
+        { label: "Total Posts", value: totalPosts?.toString() || "0", badge: "+12%" },
+        { label: "Scheduled", value: scheduledPosts?.toString() || "0", badge: "Next 24h" },
+        dashboardStats?.[2] || { label: "Engagement", value: "0%", badge: "..." },
+        dashboardStats?.[3] || { label: "Followers", value: "0", badge: "..." }
       ];
     }
 
     return [
-      { label: "Total Posts", value: totalPosts.toString(), badge: "+12%" },
-      { label: "Scheduled", value: scheduledPosts.toString(), badge: "Next 24h" },
-      { label: "Engagement", value: `${analytics.metrics.engagementRate}%`, badge: "+5.4%" },
-      { label: "Followers", value: `${analytics.metrics.followers}k`, badge: "+2.1k" }
+      { label: "Total Posts", value: totalPosts?.toString() || "0", badge: "+12%" },
+      { label: "Scheduled", value: scheduledPosts?.toString() || "0", badge: "Next 24h" },
+      { label: "Engagement", value: `${analytics?.metrics?.engagementRate || 0}%`, badge: "+5.4%" },
+      { label: "Followers", value: `${analytics?.metrics?.followers || 0}k`, badge: "+2.1k" }
     ];
   }, [analytics, posts]);
 
   const recentPostCards = useMemo(() => {
-    if (posts.length === 0) {
+    if (!posts || posts.length === 0) {
       return [];
     }
 
     return posts.slice(0, 8).map((post) => ({
       id: post.id,
-      title: (post.title || post.content).slice(0, 64) + ((post.title || post.content).length > 64 ? "..." : ""),
-      description: post.description || post.content,
-      tags: [(post.platforms?.[0] || "Instagram").toUpperCase(), post.status.toUpperCase()],
+      title: (post.title || post.content || "Untitled").slice(0, 64) + ((post.title || post.content || "").length > 64 ? "..." : ""),
+      description: post.description || post.content || "No description provided.",
+      tags: [(post.platforms?.[0] || "Instagram").toUpperCase(), (post.status || "draft").toUpperCase()],
       image:
         post.thumbnailUrl ||
         post.mediaUrl ||
@@ -159,23 +166,41 @@ function DashboardPage() {
   };
 
   const handleTrendClick = async (trend) => {
-    setIdea(trend);
-    setSelectedTrend(trend);
+    // ALWAYS open modal to fetch real-time topics for the selected category
+    await fetchTrendsForModal(trend);
+  };
+
+  const fetchTrendsForModal = async (type) => {
+    setModalTitle(type);
+    setIsTrendingModalOpen(true);
+    setModalLoading(true);
+    try {
+      const data = await api.getTrendsByTopic(type);
+      console.log(`[Dashboard] Selected topics for "${type}":`, data);
+      setModalTopics(data.data || data || []);
+    } catch (err) {
+      console.error("Trends fetch error:", err);
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const handleModalSelect = async (topic) => {
+    setIsTrendingModalOpen(false);
+    setIdea(topic);
     
-    // Auto-generate on click
     setQuickLoading(true);
     setQuickError("");
-
     try {
       const data = await api.generateContent({
-        topic: trend,
+        topic,
         platform: "Instagram",
         tone: "Professional",
         optimize: true
       });
       setQuickResult(data.data?.caption || "No output returned.");
-    } catch (error) {
-      setQuickError(error.message);
+    } catch (err) {
+      setQuickError(err.message);
     } finally {
       setQuickLoading(false);
     }
@@ -333,7 +358,7 @@ function DashboardPage() {
             <MoreHorizontal size={16} className="text-gray-500 dark:text-gray-400" />
           </div>
           <div className="space-y-4">
-            {pipelineItems.map((item) => (
+            {(pipelineItems || []).map((item) => (
               <div
                 key={item.title}
                 className="rounded-xl border border-gray-200 bg-white p-4 transition-all duration-300 hover:scale-[1.01] dark:border-gray-700 dark:bg-gray-800"
@@ -371,6 +396,16 @@ function DashboardPage() {
           </div>
         </div>
       )}
+
+      <TrendingTopicsModal 
+        isOpen={isTrendingModalOpen}
+        onClose={() => setIsTrendingModalOpen(false)}
+        activeCategory={modalTitle}
+        topics={modalTopics}
+        loading={modalLoading}
+        onRefresh={() => fetchTrendsForModal(modalTitle)}
+        onSelect={handleModalSelect}
+      />
 
       <Toast toast={toast} onClose={() => setToast({ message: "", type: "success" })} />
     </>
