@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { api } from "../services/api";
 
@@ -11,6 +11,8 @@ function ContentGeneratorPage() {
     tone: "Professional",
     optimize: true
   });
+  const [trends, setTrends] = useState({ topics: [], hashtags: [] });
+  const [loadingTrends, setLoadingTrends] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [output, setOutput] = useState("Craft your next social caption in one click.");
@@ -48,6 +50,25 @@ function ContentGeneratorPage() {
       setLoading(false);
     }
   };
+
+  const handleFetchTrends = async () => {
+    setLoadingTrends(true);
+    try {
+      const resp = await api.getTrends(form.topic);
+      setTrends(resp.data || { topics: [], hashtags: [] });
+    } catch (err) {
+      console.error("Trends fetch failed", err);
+    } finally {
+      setLoadingTrends(false);
+    }
+  };
+
+  useEffect(() => {
+    if (form.topic.length > 5 && !loadingTrends) {
+      const timeout = setTimeout(handleFetchTrends, 1500);
+      return () => clearTimeout(timeout);
+    }
+  }, [form.topic]);
 
   const handleImageUpload = (event) => {
     const file = event.target.files?.[0] || null;
@@ -119,6 +140,7 @@ function ContentGeneratorPage() {
               <option>LinkedIn</option>
               <option>X (Twitter)</option>
               <option>TikTok</option>
+              <option>YouTube</option>
             </select>
           </label>
           <label className="space-y-2">
@@ -157,6 +179,110 @@ function ContentGeneratorPage() {
         </button>
 
         {error && <p className="text-sm text-rose-600">{error}</p>}
+
+        {/* Trends Section */}
+        <section className="space-y-4 rounded-3xl border border-gray-100 bg-white/50 p-6 shadow-sm ring-1 ring-black/[0.02] transition-all dark:border-gray-700 dark:bg-gray-800/50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-studio-primary opacity-75"></span>
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-studio-primary"></span>
+                </span>
+                <h3 className="text-[0.7rem] font-bold uppercase tracking-[0.12em] text-studio-primary">Trending Now</h3>
+              </div>
+            </div>
+            <button 
+              onClick={handleFetchTrends}
+              disabled={loadingTrends}
+              className="group flex items-center gap-1 text-[0.7rem] font-bold uppercase tracking-wider text-gray-400 hover:text-studio-primary disabled:opacity-50"
+            >
+              <Sparkles size={10} className={loadingTrends ? "animate-spin" : "group-hover:animate-pulse"} />
+              {loadingTrends ? "Scouting..." : "Refresh"}
+            </button>
+          </div>
+          
+          <div className="space-y-2.5">
+            {trends.topics.length > 0 ? (
+              trends.topics.map((item, i) => {
+                const cleanTopic = item.replace(/^\d+\.\s*/, '').trim();
+                return (
+                  <button 
+                    key={i} 
+                    onClick={async () => {
+                      setForm(prev => ({ ...prev, topic: cleanTopic }));
+                      // Trigger generation immediately with this topic
+                      setLoading(true);
+                      setError("");
+                      try {
+                        const payload = new FormData();
+                        payload.append("topic", cleanTopic);
+                        payload.append("platform", form.platform);
+                        payload.append("tone", form.tone);
+                        payload.append("optimize", String(form.optimize));
+                        if (imageFile) payload.append("image", imageFile);
+                        
+                        const data = await api.generateContent(payload);
+                        setOutput(data.data?.caption || "No caption returned.");
+                        setHashtags(data.data?.hashtags || []);
+                        setIsEditing(false);
+                      } catch (err) {
+                        setError(err.message);
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                    className="flex w-full items-center gap-3 rounded-2xl bg-white p-3 text-left text-sm shadow-sm transition-all duration-200 hover:scale-[1.02] hover:bg-studio-primary/5 hover:ring-1 hover:ring-studio-primary/20 dark:bg-gray-800 dark:hover:bg-gray-700"
+                  >
+                    <span className="flex h-6 min-w-[24px] items-center justify-center rounded-full bg-studio-primary text-[10px] font-bold text-white uppercase">{i+1}</span>
+                    <span className="flex-1 font-medium text-gray-700 dark:text-gray-300 leading-tight">{cleanTopic}</span>
+                  </button>
+                );
+              })
+            ) : (
+              <div className="py-8 text-center">
+                <div className="mx-auto mb-2 h-1 w-12 rounded-full bg-gray-100 dark:bg-gray-700"></div>
+                <p className="text-xs text-gray-400 italic">Type a topic to fetch real-time trends...</p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-50 dark:border-gray-700/30 mt-2">
+            {trends.hashtags.map((tag, i) => (
+              <button 
+                key={i} 
+                onClick={async () => {
+                  const nextTopic = form.topic.includes(tag) ? form.topic : `${form.topic} ${tag}`.trim();
+                  setForm(prev => ({ ...prev, topic: nextTopic }));
+                  
+                  // Trigger generation immediately
+                  setLoading(true);
+                  setError("");
+                  try {
+                    const payload = new FormData();
+                    payload.append("topic", nextTopic);
+                    payload.append("platform", form.platform);
+                    payload.append("tone", form.tone);
+                    payload.append("optimize", String(form.optimize));
+                    if (imageFile) payload.append("image", imageFile);
+                    
+                    const data = await api.generateContent(payload);
+                    setOutput(data.data?.caption || "No caption returned.");
+                    setHashtags(data.data?.hashtags || []);
+                    setIsEditing(false);
+                  } catch (err) {
+                    setError(err.message);
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                className="rounded-lg bg-studio-primary/5 px-2 py-1 text-[11px] font-bold text-studio-primary hover:bg-studio-primary hover:text-white transition-all duration-200"
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        </section>
       </section>
 
       <section className="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-soft sm:p-7 studio-animate-in dark:border-gray-700 dark:bg-gray-800 xl:min-h-[84vh] xl:flex xl:flex-col">

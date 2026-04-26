@@ -7,7 +7,36 @@ import StatCard from "../components/common/StatCard";
 import { dashboardStats, pipelineItems } from "../data/mockData";
 import { api } from "../services/api";
 
-const trendingIdeas = ["Minimalist Aesthetic", "Tech Trends 2024", "Sustainability Tips"];
+const PLACEHOLDERS = [
+  "A 3-part carousel about the future of AI in minimalist design.",
+  "10 productivity hacks for remote designers.",
+  "A viral TikTok script about eco-friendly lifestyle.",
+  "A soulful LinkedIn post about career resilience.",
+  "A tech review description for the latest gadget."
+];
+
+const SUGGESTION_CATEGORIES = [
+  {
+    id: "trending",
+    label: "🔥 Trending",
+    items: ["2026 Tech Trends", "Viral Topics", "Breaking News", "Internet Drama"]
+  },
+  {
+    id: "business",
+    label: "💼 Business",
+    items: ["Startup Ideas", "Side Hustles", "Growth Hacks", "Marketing Ideas"]
+  },
+  {
+    id: "content",
+    label: "🎥 Content",
+    items: ["YouTube Ideas", "Reel Hooks", "Caption Ideas", "Viral Scripts"]
+  },
+  {
+    id: "ai",
+    label: "🤖 AI / Tech",
+    items: ["AI Tools", "Future Tech", "Automation Ideas", "ChatGPT Hacks"]
+  }
+];
 
 function DashboardPage() {
   const navigate = useNavigate();
@@ -21,6 +50,9 @@ function DashboardPage() {
   const [quickError, setQuickError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [toast, setToast] = useState({ message: "", type: "success" });
+  const [activeCategory, setActiveCategory] = useState("trending");
+  const [liveTrends, setLiveTrends] = useState([]);
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
 
   useEffect(() => {
     if (!toast.message) return undefined;
@@ -29,9 +61,20 @@ function DashboardPage() {
   }, [toast]);
 
   useEffect(() => {
+    const interval = setInterval(() => {
+      setPlaceholderIndex((prev) => (prev + 1) % PLACEHOLDERS.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     async function loadData() {
       setLoadingPosts(true);
-      const [analyticsResult, postsResult] = await Promise.allSettled([api.getAnalytics(), api.getPosts()]);
+      const [analyticsResult, postsResult, trendsResult] = await Promise.allSettled([
+        api.getAnalytics(), 
+        api.getPosts(),
+        api.getTrends()
+      ]);
 
       if (analyticsResult.status === "fulfilled") {
         setAnalytics(analyticsResult.value.data);
@@ -43,6 +86,11 @@ function DashboardPage() {
         setPosts(postsResult.value.data || []);
       } else {
         setPosts([]);
+      }
+
+      if (trendsResult.status === "fulfilled") {
+        const fetchedTopics = (trendsResult.value.data?.topics || []).map(t => t.replace(/^\d+\.\s*/, '').trim());
+        if (fetchedTopics.length > 0) setLiveTrends(fetchedTopics);
       }
 
       setLoadingPosts(false);
@@ -110,9 +158,27 @@ function DashboardPage() {
     }
   };
 
-  const handleTrendClick = (trend) => {
+  const handleTrendClick = async (trend) => {
+    setIdea(trend);
     setSelectedTrend(trend);
-    setIdea(`Create a social post around ${trend}`);
+    
+    // Auto-generate on click
+    setQuickLoading(true);
+    setQuickError("");
+
+    try {
+      const data = await api.generateContent({
+        topic: trend,
+        platform: "Instagram",
+        tone: "Professional",
+        optimize: true
+      });
+      setQuickResult(data.data?.caption || "No output returned.");
+    } catch (error) {
+      setQuickError(error.message);
+    } finally {
+      setQuickLoading(false);
+    }
   };
 
   const confirmDelete = async () => {
@@ -136,40 +202,57 @@ function DashboardPage() {
             <div className="max-w-3xl">
               <h1 className="text-2xl font-bold sm:text-5">What are we creating today?</h1>
               <p className="mt-2 text-sm text-white/85">Describe your idea and let the ether manifest it into content.</p>
-              <div className="mt-5 flex flex-wrap items-center gap-3 rounded-full bg-white/12 p-2 pl-5">
+              <div className="mt-5 flex flex-wrap items-center gap-3 rounded-full bg-white/12 p-2 pl-5 transition-all focus-within:bg-white/20">
                 <input
                   value={idea}
                   onChange={(e) => setIdea(e.target.value)}
-                  placeholder="e.g. A 3-part carousel about the future of AI in minimalist design."
-                  className="h-11 min-w-[220px] flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/75"
+                  placeholder={PLACEHOLDERS[placeholderIndex]}
+                  className="h-11 min-w-[220px] flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/60 placeholder:italic transition-all duration-500"
                 />
                 <button
                   onClick={handleQuickGenerate}
                   disabled={quickLoading || !idea.trim()}
-                  className="rounded-full bg-white px-6 py-3 text-sm font-semibold text-studio-primary transition-all duration-300 hover:scale-[1.02] disabled:opacity-60"
+                  className="rounded-full bg-white px-6 py-3 text-sm font-semibold text-studio-primary shadow-lg transition-all duration-300 hover:scale-[1.05] hover:shadow-xl active:scale-95 disabled:opacity-60"
                 >
-                  {quickLoading ? "Generating..." : "Generate"}
+                  {quickLoading ? "Manifesting..." : "Generate"}
                 </button>
               </div>
 
               {quickError && <p className="mt-3 text-sm text-rose-200">{quickError}</p>}
               {quickResult && (
-                <div className="mt-3 rounded-2xl bg-white/15 p-3">
-                  <p className="max-h-24 overflow-y-auto whitespace-pre-wrap text-sm text-white/95 studio-scrollbar">{quickResult}</p>
+                <div className="mt-3 rounded-2xl bg-white/15 p-4 backdrop-blur-md">
+                  <p className="max-h-32 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed text-white/95 studio-scrollbar">{quickResult}</p>
                 </div>
               )}
 
-              <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-white/90">
-                <span className="font-semibold text-white/70">TRENDING:</span>
-                {trendingIdeas.map((item) => (
-                  <button
-                    key={item}
-                    onClick={() => handleTrendClick(item)}
-                    className={`rounded-full px-2.5 py-1 transition-all duration-300 hover:scale-105 ${selectedTrend === item ? "bg-white text-studio-primary" : "bg-white/15"}`}
-                  >
-                    {item}
-                  </button>
-                ))}
+              <div className="mt-8 space-y-5">
+                <div className="flex items-center gap-4 overflow-x-auto pb-2 no-scrollbar">
+                  {SUGGESTION_CATEGORIES.map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => setActiveCategory(cat.id)}
+                      className={`whitespace-nowrap rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-300 ${activeCategory === cat.id ? "bg-white text-studio-primary shadow-lg" : "bg-white/10 text-white/70 hover:bg-white/20"}`}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-3 overflow-x-auto pb-4 no-scrollbar">
+                  {[
+                    ...(SUGGESTION_CATEGORIES.find(c => c.id === activeCategory)?.items || []),
+                    ...(activeCategory === "trending" ? liveTrends : [])
+                  ].map((item, idx) => (
+                    <button
+                      key={`${item}-${idx}`}
+                      onClick={() => handleTrendClick(item)}
+                      className="group relative flex shrink-0 items-center gap-2 overflow-hidden rounded-full bg-white/10 px-5 py-2.5 text-sm font-semibold text-white shadow-sm ring-1 ring-white/20 transition-all duration-300 hover:scale-105 hover:bg-studio-primary hover:shadow-purple-500/40 hover:ring-studio-primary active:scale-95"
+                    >
+                      {item.length > 28 ? item.slice(0, 25) + "..." : item}
+                      <span className="absolute inset-0 z-0 bg-gradient-to-r from-transparent via-white/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

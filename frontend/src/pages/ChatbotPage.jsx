@@ -229,10 +229,11 @@ function ChatbotPage() {
         <div className="grid min-w-0 flex-1 gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
           <section className="flex min-h-[84vh] flex-col rounded-[2rem] bg-white p-4 text-gray-900 shadow-soft dark:bg-gray-800 dark:text-white">
             <div className="mb-4 flex flex-wrap gap-2 text-sm">
-              {["Optimize Bio", "Content Calendar", "SEO Hashtags"].map((chip) => (
+              {["Latest Trends", "Optimize Bio", "Content Calendar", "SEO Hashtags"].map((chip) => (
                 <span
                   key={chip}
-                  className="rounded-full bg-gray-100 px-3 py-1.5 font-semibold text-studio-primary transition-all duration-300 hover:scale-105 dark:bg-gray-700"
+                  onClick={() => setPrompt(`Show me the ${chip.toLowerCase()} related to...`)}
+                  className="cursor-pointer rounded-full bg-gray-100 px-3 py-1.5 font-semibold text-studio-primary transition-all duration-300 hover:scale-105 dark:bg-gray-700"
                 >
                   {chip}
                 </span>

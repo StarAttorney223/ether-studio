@@ -79,5 +79,6 @@ export const api = {
   chat: (payload) => request("/chat", { method: "POST", body: JSON.stringify(payload) }),
   schedulePost: (payload) =>
     request("/schedule-post", { method: "POST", body: JSON.stringify(payload) }),
-  deleteScheduledPost: (id) => request(`/schedule-post/${id}`, { method: "DELETE" })
+  deleteScheduledPost: (id) => request(`/schedule-post/${id}`, { method: "DELETE" }),
+  getTrends: (topic = "") => request(`/trends${topic ? `?topic=${encodeURIComponent(topic)}` : ""}`)
 };
