@@ -109,13 +109,13 @@ export async function uploadImageController(req, res) {
 }
 
 export async function chatController(req, res) {
-  const { message, context } = req.body;
+  const { message, context, history } = req.body;
 
   if (!message) {
     return res.status(400).json({ success: false, message: "message is required" });
   }
 
-  const reply = await chatWithAssistant({ message, context });
+  const reply = await chatWithAssistant({ message, context, history });
 
   return res.status(200).json({
     success: true,

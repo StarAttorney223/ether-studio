@@ -226,11 +226,17 @@ function buildChatPrompt({ message, context, detailed }) {
 
 function buildOpenRouterMessages(payload) {
   if (payload.mode === "chat") {
+    const historyMsgs = Array.isArray(payload.history) ? payload.history.map(msg => ({
+      role: msg.role === "assistant" ? "assistant" : "user",
+      content: String(msg.content)
+    })) : [];
+
     return [
       {
         role: "system",
         content: "You are a helpful, conversational social media assistant. Keep answers natural and concise."
       },
+      ...historyMsgs,
       {
         role: "user",
         content: buildChatPrompt(payload)
@@ -399,7 +405,7 @@ export async function generateCaption({ topic, platform, tone, optimize, imageCo
   });
 }
 
-export async function chatWithAssistant({ message, context }) {
+export async function chatWithAssistant({ message, context, history }) {
   const normMessage = String(message).toLowerCase();
   
   // Detect real-time trend intent
@@ -422,9 +428,17 @@ export async function chatWithAssistant({ message, context }) {
   const mode = detectResponseMode(message);
 
   if (mode === "content") {
+    let enhancedTopic = message;
+    if (history && history.length > 0) {
+      const lastAsst = [...history].reverse().find(m => m.role === 'assistant');
+      if (lastAsst) {
+        enhancedTopic = `User requested: "${message}". Context from previous AI response: "${lastAsst.content.substring(0, 400)}"`;
+      }
+    }
+
     return generateText({
       mode: "content",
-      topic: message,
+      topic: enhancedTopic,
       platform: context || "Instagram / LinkedIn",
       tone: "Helpful and clear",
       optimize: true,
@@ -438,6 +452,7 @@ export async function chatWithAssistant({ message, context }) {
     mode: "chat",
     message,
     context,
+    history,
     detailed: wantsDetailedResponse(message)
   });
 }

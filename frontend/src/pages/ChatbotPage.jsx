@@ -198,7 +198,11 @@ function ChatbotPage() {
     setLoading(true);
 
     try {
-      const data = await api.chat({ message: text, context: "Social media strategy assistant" });
+      const data = await api.chat({ 
+        message: text, 
+        context: "Social media strategy assistant",
+        history: messages 
+      });
       const nextMessages = [...nextUserMessages, { role: "assistant", content: data.data?.reply || "No response" }];
       setMessages(nextMessages);
       await persistConversation(nextMessages);
